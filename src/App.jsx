@@ -29,6 +29,7 @@ export default function App() {
   const [problems, setProblems] = useState([]);
   const [backendState, setBackendState] = useState(null);
   const [runtimes, setRuntimes] = useState(null);
+  const [aiStatus, setAiStatus] = useState(null);
   const [currentSlug, setCurrentSlug] = useState(slugFromHash);
   const [error, setError] = useState('');
 
@@ -36,16 +37,18 @@ export default function App() {
     let active = true;
     (async () => {
       try {
-        const [catalog, savedState, runtimeState] = await Promise.all([
+        const [catalog, savedState, runtimeState, loadedAiStatus] = await Promise.all([
           fetch('/api/problems').then((response) => response.json()),
           loadState(),
           fetch('/api/runtime').then((response) => response.json()),
+          fetch('/api/ai/status').then((response) => response.json()),
         ]);
         const migratedState = await migrateBrowserState(catalog, savedState);
         if (!active) return;
         setProblems(catalog);
         setBackendState(migratedState);
         setRuntimes(runtimeState);
+        setAiStatus(loadedAiStatus);
         const explicitList = window.location.hash === '#/problems';
         const restoredSlug = slugFromHash() || (!explicitList && migratedState.session.activeProblemSlug);
         if (restoredSlug && catalog.some((problem) => problem.slug === restoredSlug)) {
@@ -110,7 +113,7 @@ export default function App() {
     return <main className="load-state"><div className="error-card">{error}<small>Make sure the local server is running with npm run dev.</small><button onClick={() => window.location.reload()}>Retry</button></div></main>;
   }
 
-  if (!problems.length || !backendState || !runtimes) {
+  if (!problems.length || !backendState || !runtimes || !aiStatus) {
     return <main className="load-state"><LoaderCircle className="spin" size={28} /><span>Restoring your workspace…</span></main>;
   }
 
@@ -133,6 +136,7 @@ export default function App() {
           problemState={backendState.problems[currentProblem.slug] || {}}
           settings={backendState.settings}
           runtimes={runtimes}
+          aiStatus={aiStatus}
           onProblemState={updateProblemMemory}
           onSettings={changeSettings}
           onActivity={recordActivity}

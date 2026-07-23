@@ -4,9 +4,11 @@ import {
   Check, CheckCircle2, ChevronDown, CircleAlert, Clock3, Cloud, CloudAlert,
   Code2, FileText, Focus, Lightbulb, ListChecks, LoaderCircle, Maximize2,
   Minus, NotebookPen, PanelBottom, Play, Plus, RotateCcw, Send, Settings,
-  TerminalSquare, WrapText, X, XCircle,
+  ShieldCheck, Sparkles, TerminalSquare, WandSparkles, WrapText, X, XCircle,
 } from 'lucide-react';
-import { saveProblemOnExit, saveSubmission, updateProblem } from '../state-client.js';
+import {
+  generateAiSolution, generateAiTests, saveProblemOnExit, saveSubmission, updateProblem,
+} from '../state-client.js';
 
 function parseArgument(value) {
   const trimmed = value.trim();
@@ -18,6 +20,18 @@ function stringifyArgument(value) {
   return typeof value === 'string' ? JSON.stringify(value) : JSON.stringify(value, null, 2);
 }
 
+function normalizeStoredTestCases(savedCases, defaultArgs) {
+  const cases = savedCases?.length ? savedCases : [defaultArgs];
+  return cases.map((testCase, index) => Array.isArray(testCase)
+    ? { args: testCase, label: `Case ${index + 1}`, source: 'custom' }
+    : {
+        args: Array.isArray(testCase.args) ? testCase.args : defaultArgs,
+        label: testCase.label || `Case ${index + 1}`,
+        source: testCase.source || 'custom',
+        ...(Object.hasOwn(testCase, 'expected') ? { expected: testCase.expected } : {}),
+      });
+}
+
 function elapsedLabel(seconds) {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
@@ -25,7 +39,7 @@ function elapsedLabel(seconds) {
   return hours ? `${hours}:${minutes}:${remainder}` : `${minutes}:${remainder}`;
 }
 
-function Description({ problem }) {
+function Description({ problem, generatedTestCount }) {
   const paragraphs = problem.description.split(/\n\s*\n/).filter(Boolean);
   return (
     <div className="description-content">
@@ -33,7 +47,7 @@ function Description({ problem }) {
       <div className="problem-meta">
         <span className={`difficulty difficulty--${problem.difficulty.toLowerCase()}`}>{problem.difficulty}</span>
         <span className="meta-pill">{problem.category}</span>
-        {problem.hasJudge && <span className="judge-ready"><Check size={13} /> Local judge</span>}
+        {(problem.hasJudge || generatedTestCount > 0) && <span className="judge-ready"><Check size={13} /> {generatedTestCount > 0 ? `${generatedTestCount} verified AI tests` : 'Local judge'}</span>}
       </div>
       <div className="statement">
         {paragraphs.map((paragraph, index) => {
@@ -48,7 +62,7 @@ function Description({ problem }) {
   );
 }
 
-function SolutionPanel({ problem }) {
+function SolutionPanel({ problem, aiStatus, aiSolution, aiBusy, aiError, onGenerate, onUseCode }) {
   const [source, setSource] = useState('');
   const [loading, setLoading] = useState(false);
   async function reveal() {
@@ -59,10 +73,28 @@ function SolutionPanel({ problem }) {
       setSource(data.source || 'Solution unavailable.');
     } finally { setLoading(false); }
   }
-  if (!source) return (
-    <div className="reveal-panel"><Lightbulb size={32} /><h2>Reference solution</h2><p>Try the problem yourself first. Reveal the imported solution when you want to compare approaches.</p><button onClick={reveal} disabled={loading}>{loading ? <LoaderCircle className="spin" size={16} /> : null} Reveal solution</button></div>
-  );
-  return <pre className="reference-code"><code>{source}</code></pre>;
+  return <div className="solutions-panel">
+    <section className="ai-solution-card">
+      <div className="ai-card-heading"><span><WandSparkles size={20} /></span><div><h2>GLM optimal solution</h2><p>Generated, independently reviewed, and executed locally before it is saved.</p></div></div>
+      {!aiStatus.configured ? <AiSetupNote /> : aiSolution ? <>
+        <div className="verification-badges"><span><ShieldCheck size={14} /> Verified on {aiSolution.verifiedCaseCount} cases</span><span>{aiSolution.timeComplexity}</span><span>{aiSolution.spaceComplexity}</span></div>
+        <p className="ai-explanation">{aiSolution.explanation}</p>
+        {aiSolution.reviewIssues?.length > 0 && <div className="review-notes"><strong>Reviewer notes</strong>{aiSolution.reviewIssues.map((issue, index) => <span key={index}>{issue}</span>)}</div>}
+        <pre className="reference-code ai-code"><code>{aiSolution.code}</code></pre>
+        <div className="ai-actions"><button onClick={() => onUseCode(aiSolution.code)}>Use in editor</button><button onClick={onGenerate} disabled={aiBusy}>{aiBusy ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />} Regenerate and verify</button></div>
+      </> : <button className="ai-generate-button" onClick={onGenerate} disabled={aiBusy}>{aiBusy ? <LoaderCircle className="spin" size={16} /> : <Sparkles size={16} />}{aiBusy ? 'Generating and checking…' : 'Generate optimal Python solution'}</button>}
+      {aiError && <div className="ai-error"><CircleAlert size={15} />{aiError}</div>}
+    </section>
+    <section className="reference-section">
+      <div><h2>Imported reference solution</h2><p>Reveal the solution that shipped in the source repository.</p></div>
+      {!source ? <button onClick={reveal} disabled={loading}>{loading ? <LoaderCircle className="spin" size={15} /> : <Lightbulb size={15} />} Reveal reference</button> : null}
+    </section>
+    {source && <pre className="reference-code"><code>{source}</code></pre>}
+  </div>;
+}
+
+function AiSetupNote() {
+  return <div className="ai-setup-note"><CircleAlert size={17} /><span><strong>Fireworks is not configured</strong><small>Copy <code>.env.example</code> to <code>.env</code>, set <code>FIREWORKS_API_KEY</code>, and restart the server.</small></span></div>;
 }
 
 function SubmissionsPanel({ submissions }) {
@@ -87,20 +119,24 @@ function NotesPanel({ notes, onChange }) {
 }
 
 export default function Workspace({
-  problem, problemState, settings, runtimes, onProblemState, onSettings, onActivity,
+  problem, problemState, settings, runtimes, aiStatus, onProblemState, onSettings, onActivity,
 }) {
   const savedUi = problemState.ui || {};
   const defaultTestCase = problem.defaultArgs.map(stringifyArgument);
   const [leftTab, setLeftTab] = useState(savedUi.leftTab || 'description');
   const [bottomTab, setBottomTab] = useState(savedUi.bottomTab || 'testcase');
   const [code, setCode] = useState(problemState.code ?? problem.starterCode);
-  const [testCases, setTestCases] = useState(problemState.testCases?.length ? problemState.testCases : [defaultTestCase]);
+  const [testCases, setTestCases] = useState(() => normalizeStoredTestCases(problemState.testCases, defaultTestCase));
   const [activeCase, setActiveCase] = useState(Math.min(savedUi.activeCase || 0, Math.max(0, (problemState.testCases?.length || 1) - 1)));
   const [notes, setNotes] = useState(problemState.notes || '');
   const [running, setRunning] = useState(false);
   const [lastRun, setLastRun] = useState(problemState.lastRun || null);
   const [submissions, setSubmissions] = useState(problemState.submissions || []);
   const [status, setStatus] = useState(problemState.status);
+  const [generatedTests, setGeneratedTests] = useState(problemState.generatedTests?.tests || []);
+  const [aiSolution, setAiSolution] = useState(problemState.aiSolution || null);
+  const [aiBusy, setAiBusy] = useState('');
+  const [aiError, setAiError] = useState('');
   const [seconds, setSeconds] = useState(savedUi.elapsedSeconds || 0);
   const [saveStatus, setSaveStatus] = useState('saved');
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -115,6 +151,7 @@ export default function Workspace({
   const latestState = useRef({});
   const runtime = runtimes[problem.editorLanguage];
   const canRun = problem.runnable && runtime?.available;
+  const canSubmit = canRun && (problem.hasJudge || generatedTests.length > 0);
   latestState.current = { code, testCases, notes, leftTab, bottomTab, activeCase, seconds };
 
   async function flushPending() {
@@ -184,7 +221,7 @@ export default function Workspace({
     const shortcut = (event) => {
       if (!(event.ctrlKey || event.metaKey) || event.key !== 'Enter') return;
       event.preventDefault();
-      if (event.shiftKey && problem.hasJudge) void submit(); else void run();
+      if (event.shiftKey && canSubmit) void submit(); else void run();
     };
     window.addEventListener('keydown', shortcut);
     return () => window.removeEventListener('keydown', shortcut);
@@ -211,15 +248,17 @@ export default function Workspace({
   }
 
   function updateTestCase(parameterIndex, value) {
-    const next = testCases.map((testCase, caseIndex) => caseIndex === activeCase
-      ? testCase.map((item, index) => index === parameterIndex ? value : item)
-      : testCase);
+    const next = testCases.map((testCase, caseIndex) => {
+      if (caseIndex !== activeCase) return testCase;
+      const { expected: _expected, ...editable } = testCase;
+      return { ...editable, args: testCase.args.map((item, index) => index === parameterIndex ? value : item), source: 'custom' };
+    });
     setTestCases(next);
     queueSave({ testCases: next });
   }
 
   function addTestCase() {
-    const next = [...testCases, [...defaultTestCase]];
+    const next = [...testCases, { args: [...defaultTestCase], label: `Case ${testCases.length + 1}`, source: 'custom' }];
     setTestCases(next);
     setActiveCase(next.length - 1);
     queueSave({ testCases: next, ui: { activeCase: next.length - 1 } });
@@ -261,7 +300,14 @@ export default function Workspace({
     try {
       const response = await fetch('/api/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: problem.slug, code, cases: testCases.map((testCase) => ({ args: testCase.map(parseArgument) })) }),
+        body: JSON.stringify({
+          slug: problem.slug,
+          code,
+          cases: testCases.map((testCase) => ({
+            args: testCase.args.map(parseArgument),
+            ...(Object.hasOwn(testCase, 'expected') && testCase.expected !== undefined ? { expected: testCase.expected } : {}),
+          })),
+        }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Run failed.');
@@ -278,7 +324,7 @@ export default function Workspace({
   }
 
   async function submit() {
-    if (!canRun || !problem.hasJudge || running) return;
+    if (!canSubmit || running) return;
     await flushPending();
     setRunning(true); setBottomTab('result'); saveUi({ bottomTab: 'result' });
     try {
@@ -303,6 +349,66 @@ export default function Workspace({
       const storedRun = { kind: 'submit', data: { accepted: false, error: error.message }, time: Date.now() };
       setLastRun(storedRun); queueSave({ lastRun: storedRun }, 0);
     } finally { setRunning(false); }
+  }
+
+  async function generateTests() {
+    if (!aiStatus.configured || aiBusy) return;
+    await flushPending();
+    setAiBusy('tests'); setAiError('');
+    try {
+      const generated = await generateAiTests(problem.slug);
+      setGeneratedTests(generated.tests);
+      const customCases = testCases.filter((testCase) => testCase.source !== 'ai');
+      const aiCases = generated.tests.map((test) => ({
+        args: test.args.map(stringifyArgument),
+        expected: test.expected,
+        label: test.label,
+        source: 'ai',
+      }));
+      const nextCases = [...customCases, ...aiCases].slice(0, 20);
+      const firstGenerated = Math.min(customCases.length, nextCases.length - 1);
+      setTestCases(nextCases);
+      setActiveCase(firstGenerated);
+      const saved = await updateProblem(problem.slug, {
+        testCases: nextCases,
+        ui: { ...savedUi, activeCase: firstGenerated, bottomTab: 'testcase' },
+      });
+      onProblemState(problem.slug, saved);
+      setBottomTab('testcase');
+      setSaveStatus('saved');
+    } catch (error) {
+      setAiError(error.message);
+    } finally { setAiBusy(''); }
+  }
+
+  async function generateSolution() {
+    if (!aiStatus.configured || aiBusy) return;
+    await flushPending();
+    setAiBusy('solution'); setAiError('');
+    try {
+      const generated = await generateAiSolution(problem.slug);
+      setAiSolution(generated.solution);
+      const tests = generated.state.generatedTests?.tests || generatedTests;
+      setGeneratedTests(tests);
+      let savedState = generated.state;
+      if (tests.length && !testCases.some((testCase) => testCase.source === 'ai')) {
+        const aiCases = tests.map((test) => ({
+          args: test.args.map(stringifyArgument), expected: test.expected, label: test.label, source: 'ai',
+        }));
+        const nextCases = [...testCases, ...aiCases].slice(0, 20);
+        setTestCases(nextCases);
+        savedState = await updateProblem(problem.slug, { testCases: nextCases });
+      }
+      onProblemState(problem.slug, savedState);
+      setSaveStatus('saved');
+    } catch (error) {
+      setAiError(error.message);
+    } finally { setAiBusy(''); }
+  }
+
+  function useAiSolution(generatedCode) {
+    setCode(generatedCode);
+    queueSave({ code: generatedCode }, 0);
   }
 
   function reset() {
@@ -360,8 +466,16 @@ export default function Workspace({
           {tabs.map(([key, Icon, label]) => <button key={key} className={leftTab === key ? 'active' : ''} onClick={() => selectLeftTab(key)}><Icon size={15} />{label}</button>)}
         </div>
         <div className="panel-scroll">
-          {leftTab === 'description' && <Description problem={problem} />}
-          {leftTab === 'solution' && <SolutionPanel problem={problem} />}
+          {leftTab === 'description' && <Description problem={problem} generatedTestCount={generatedTests.length} />}
+          {leftTab === 'solution' && <SolutionPanel
+            problem={problem}
+            aiStatus={aiStatus}
+            aiSolution={aiSolution}
+            aiBusy={Boolean(aiBusy)}
+            aiError={aiError}
+            onGenerate={generateSolution}
+            onUseCode={useAiSolution}
+          />}
           {leftTab === 'submissions' && <SubmissionsPanel submissions={submissions} />}
           {leftTab === 'notes' && <NotesPanel notes={notes} onChange={changeNotes} />}
         </div>
@@ -424,24 +538,35 @@ export default function Workspace({
           <div className="console-content">
             {bottomTab === 'testcase' ? (
               <div className="testcase-editor">
+                {problem.editorLanguage === 'python' && problem.parameters.length > 0 && <div className="ai-test-toolbar">
+                  {aiStatus.configured ? <>
+                    <button className="ai-generate-button" onClick={generateTests} disabled={Boolean(aiBusy)}>
+                      {aiBusy === 'tests' ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />}
+                      {aiBusy === 'tests' ? 'Generating, reviewing, and verifying…' : generatedTests.length ? 'Regenerate verified tests' : 'Generate verified test cases'}
+                    </button>
+                    {generatedTests.length > 0 && <span><ShieldCheck size={14} /> {generatedTests.length} AI cases verified and saved</span>}
+                  </> : <AiSetupNote />}
+                  {aiError && <div className="ai-error"><CircleAlert size={15} />{aiError}</div>}
+                </div>}
                 <div className="case-tabs">
-                  {testCases.map((_, index) => <span className={activeCase === index ? 'active' : ''} key={index}>
-                    <button onClick={() => chooseCase(index)}>Case {index + 1}</button>
+                  {testCases.map((testCase, index) => <span className={activeCase === index ? 'active' : ''} key={index}>
+                    <button onClick={() => chooseCase(index)}>{testCase.source === 'ai' && <Sparkles size={11} />} {testCase.label || `Case ${index + 1}`}</button>
                     {testCases.length > 1 && <button className="remove-case" onClick={() => removeTestCase(index)} aria-label={`Remove case ${index + 1}`}><X size={12} /></button>}
                   </span>)}
                   <button className="add-case" onClick={addTestCase} title="Add testcase"><Plus size={14} /></button>
                   <small>JSON values</small>
                 </div>
                 {problem.parameters.length ? problem.parameters.map((parameter, index) => (
-                  <label key={parameter}><span>{parameter} =</span><textarea value={testCases[activeCase]?.[index] ?? ''} onChange={(event) => updateTestCase(index, event.target.value)} /></label>
+                  <label key={parameter}><span>{parameter} =</span><textarea value={testCases[activeCase]?.args?.[index] ?? ''} onChange={(event) => updateTestCase(index, event.target.value)} /></label>
                 )) : <div className="fixture-note"><CircleAlert size={17} />This imported task does not expose a standard <code>solution(...)</code> signature.</div>}
+                {Object.hasOwn(testCases[activeCase] || {}, 'expected') && <div className="expected-output"><span><ShieldCheck size={14} /> Verified expected output</span><pre>{JSON.stringify(testCases[activeCase].expected, null, 2)}</pre></div>}
               </div>
             ) : <ResultView lastRun={lastRun} />}
           </div>
           <div className="action-bar">
-            <span>{canRun ? `${runtime.version || problem.language} · Ctrl+Enter to run${problem.hasJudge ? ' · Ctrl+Shift+Enter to submit' : ''}` : (runtime?.reason || `${problem.language} runtime is unavailable`)}</span>
+            <span>{canRun ? `${runtime.version || problem.language} · Ctrl+Enter to run${canSubmit ? ' · Ctrl+Shift+Enter to submit' : ''}` : (runtime?.reason || `${problem.language} runtime is unavailable`)}</span>
             {canRun && <button className="run-button" onClick={run} disabled={running}><Play size={15} fill="currentColor" /> Run</button>}
-            {canRun && problem.hasJudge && <button className="submit-button" onClick={submit} disabled={running}>{running ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />} Submit</button>}
+            {canSubmit && <button className="submit-button" onClick={submit} disabled={running}>{running ? <LoaderCircle className="spin" size={15} /> : <Send size={15} />} Submit</button>}
           </div>
         </section>}
       </section>
@@ -459,11 +584,14 @@ function ResultView({ lastRun }) {
     </div>;
   }
   if (!data.ok) return <div className="runtime-error"><h3><XCircle size={18} /> Runtime Error</h3><pre>{data.error || data.results?.find((result) => !result.ok)?.error}</pre></div>;
-  return <div className="result-cases">{data.results?.map((result, index) => (
-    <article key={index} className={result.ok ? 'passed' : 'failed'}>
-      <h3>{result.ok ? <CheckCircle2 size={16} /> : <XCircle size={16} />} Case {index + 1}</h3>
-      {result.ok ? <pre>{JSON.stringify(result.value, null, 2) ?? 'null'}</pre> : <pre>{result.error}</pre>}
+  return <div className="result-cases">{data.results?.map((result, index) => {
+    const evaluated = Object.hasOwn(result, 'passed');
+    const successful = result.ok && (!evaluated || result.passed);
+    return <article key={index} className={successful ? 'passed' : 'failed'}>
+      <h3>{successful ? <CheckCircle2 size={16} /> : <XCircle size={16} />} Case {index + 1}{evaluated ? (result.passed ? ' · Passed' : ' · Output mismatch') : ''}</h3>
+      {result.ok ? <><label>Actual output</label><pre>{JSON.stringify(result.value, null, 2) ?? 'null'}</pre></> : <pre>{result.error}</pre>}
+      {evaluated && <><label>Expected output</label><pre>{JSON.stringify(result.expected, null, 2) ?? 'null'}</pre></>}
       {result.logs && <><label>Console</label><pre>{result.logs}</pre></>}
-    </article>
-  ))}</div>;
+    </article>;
+  })}</div>;
 }

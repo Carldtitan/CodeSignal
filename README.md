@@ -29,6 +29,22 @@ Open [http://localhost:3000](http://localhost:3000).
 
 The backend creates `data/codelab-state.json` automatically. This private, Git-ignored file is the source of truth for everything you do in the workspace. Reopening the app restores the active problem and the exact state of your practice session. Existing progress from the previous browser-storage version is imported automatically on first launch.
 
+## Fireworks GLM generation
+
+Copy `.env.example` to `.env`, add your Fireworks key, and restart the server:
+
+```bash
+FIREWORKS_API_KEY=fw_your_key_here
+FIREWORKS_MODEL=accounts/fireworks/models/glm-5p2
+```
+
+The API key stays on the local backend and is never returned to the browser or written to session state. For Python problems with a `solution(...)` signature, the workspace provides two actions:
+
+- **Generate verified test cases**: GLM proposes a diverse suite, reviews it in a second pass, and the backend executes every input against the imported reference solution before saving the inputs and expected outputs.
+- **Generate optimal Python solution**: GLM writes a candidate, the backend executes it against curated and generated tests, sends failures back for repair, performs an independent review, executes the reviewed code again, and saves it only after all cases pass.
+
+Test generation normally uses two or three model calls. Solution generation uses two to four calls, plus test generation when the problem has no verified suite yet. Fireworks usage charges therefore apply. “Verified” means the artifact passed the stored local tests; it is strong evidence, not a mathematical proof of correctness or optimality.
+
 ## Checks and production build
 
 ```bash

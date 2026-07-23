@@ -36,6 +36,14 @@ export function saveSubmission(slug, submission) {
   return mutate(`/api/state/problems/${slug}/submissions`, 'POST', submission);
 }
 
+export function generateAiTests(slug) {
+  return request(`/api/ai/problems/${slug}/generate-tests`, { method: 'POST', body: '{}' });
+}
+
+export function generateAiSolution(slug) {
+  return request(`/api/ai/problems/${slug}/generate-solution`, { method: 'POST', body: '{}' });
+}
+
 export function saveProblemOnExit(slug, snapshot) {
   const body = new Blob([JSON.stringify(snapshot)], { type: 'application/json' });
   return navigator.sendBeacon(`/api/state/problems/${slug}/snapshot`, body);
