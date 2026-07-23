@@ -1,8 +1,8 @@
 import {
-  Bell, ChevronLeft, ChevronRight, Flame, FlaskConical, List, Play, Shuffle,
+  ChevronLeft, ChevronRight, Flame, FlaskConical, List, Shuffle,
 } from 'lucide-react';
 
-export default function TopNav({ compact, problem, onHome, onPrevious, onNext, onRandom }) {
+export default function TopNav({ compact, problem, streak, onHome, onDaily, onPrevious, onNext, onRandom }) {
   return (
     <header className="topnav">
       <div className="topnav__left">
@@ -12,10 +12,7 @@ export default function TopNav({ compact, problem, onHome, onPrevious, onNext, o
         </button>
         {!compact && (
           <nav className="main-links" aria-label="Main navigation">
-            <button className="main-links__active">Explore</button>
-            <button onClick={onHome}>Problems</button>
-            <button>Interview</button>
-            <button>Discuss</button>
+            <button className="main-links__active" onClick={onHome}>Problems</button>
           </nav>
         )}
         {compact && problem && (
@@ -24,17 +21,15 @@ export default function TopNav({ compact, problem, onHome, onPrevious, onNext, o
             <span className="nav-divider" />
             <button className="icon-button" onClick={onPrevious} title="Previous problem"><ChevronLeft size={19} /></button>
             <button className="icon-button" onClick={onNext} title="Next problem"><ChevronRight size={19} /></button>
-            <button className="problem-title-button" onClick={onHome}>{problem.id}. {problem.title}</button>
+            <button className="problem-title-button" onClick={onHome} title="Return to the problem list">{problem.id}. {problem.title}</button>
           </div>
         )}
       </div>
       <div className="topnav__right">
-        {compact && <button className="icon-button" onClick={onRandom} title="Random problem"><Shuffle size={17} /></button>}
-        {!compact && <button className="daily-button"><FlaskConical size={16} /> Daily Challenge</button>}
-        <button className="streak"><Flame size={18} /><span>0</span></button>
-        <button className="icon-button"><Bell size={17} /></button>
-        <span className="avatar">C</span>
-        <button className="premium">Premium</button>
+        {compact && <button className="icon-button" onClick={onRandom} title="Open a random problem"><Shuffle size={17} /></button>}
+        <button className="daily-button" onClick={onDaily} title="Open today's deterministic daily problem"><FlaskConical size={16} /> Daily Challenge</button>
+        <span className="streak" title={`${streak}-day practice streak`}><Flame size={18} /><span>{streak}</span></span>
+        <span className="avatar" title="Local profile">C</span>
       </div>
     </header>
   );

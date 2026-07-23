@@ -1,30 +1,34 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Check, ChevronDown, Circle, Filter, Search, Shuffle, Sparkles,
 } from 'lucide-react';
-import { getStatuses } from '../storage.js';
 
 const difficulties = ['All difficulties', 'Easy', 'Medium', 'Hard'];
 
-export default function ProblemList({ problems, onSelect }) {
-  const [query, setQuery] = useState('');
-  const [difficulty, setDifficulty] = useState('All difficulties');
-  const [category, setCategory] = useState('All topics');
-  const [statuses, setStatuses] = useState(getStatuses);
+export default function ProblemList({ problems, statuses, initialFilters, onFilters, onSelect }) {
+  const [query, setQuery] = useState(initialFilters?.query || '');
+  const [difficulty, setDifficulty] = useState(initialFilters?.difficulty || 'All difficulties');
+  const [category, setCategory] = useState(initialFilters?.category || 'All topics');
+  const [view, setView] = useState(initialFilters?.view || 'all');
   const categories = useMemo(() => ['All topics', ...new Set(problems.map((problem) => problem.category))], [problems]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => onFilters({ query, difficulty, category, view }), 250);
+    return () => clearTimeout(timer);
+  }, [query, difficulty, category, view]);
 
   const filtered = useMemo(() => problems.filter((problem) => {
     const matchesQuery = `${problem.title} ${problem.tags.join(' ')}`.toLowerCase().includes(query.toLowerCase());
     const matchesDifficulty = difficulty === 'All difficulties' || problem.difficulty === difficulty;
     const matchesCategory = category === 'All topics' || problem.category === category;
-    return matchesQuery && matchesDifficulty && matchesCategory;
-  }), [problems, query, difficulty, category]);
+    const matchesView = view === 'all' || Boolean(statuses[problem.slug]);
+    return matchesQuery && matchesDifficulty && matchesCategory && matchesView;
+  }), [problems, query, difficulty, category, view, statuses]);
 
   const solved = Object.values(statuses).filter((status) => status === 'solved').length;
   const attempted = Object.values(statuses).filter((status) => status === 'attempted').length;
 
   function choose(problem) {
-    setStatuses(getStatuses());
     onSelect(problem);
   }
 
@@ -59,7 +63,10 @@ export default function ProblemList({ problems, onSelect }) {
       <section className="problem-browser">
         <div className="browser-heading">
           <div><h2>Problemset</h2><p>{problems.length} imported exercises · {problems.filter((p) => p.hasJudge).length} with local judge cases</p></div>
-          <div className="view-tabs"><button className="active">All Problems</button><button>My List</button></div>
+          <div className="view-tabs">
+            <button className={view === 'all' ? 'active' : ''} onClick={() => setView('all')}>All Problems</button>
+            <button className={view === 'mine' ? 'active' : ''} onClick={() => setView('mine')}>My Progress</button>
+          </div>
         </div>
         <div className="filter-bar">
           <label className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search questions" /></label>
