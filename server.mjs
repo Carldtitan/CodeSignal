@@ -64,7 +64,10 @@ app.post('/api/submit', async (request, response) => {
 if (process.env.NODE_ENV === 'production') {
   const dist = path.join(repositoryRoot, 'dist');
   app.use(express.static(dist));
-  app.get('*', (_request, response) => response.sendFile(path.join(dist, 'index.html')));
+  app.use((request, response, next) => {
+    if (request.method !== 'GET') return next();
+    return response.sendFile(path.join(dist, 'index.html'));
+  });
 } else {
   const { createServer } = await import('vite');
   const vite = await createServer({ server: { middlewareMode: true }, appType: 'spa' });
