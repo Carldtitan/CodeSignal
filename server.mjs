@@ -1,9 +1,12 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildCatalog, repositoryRoot, toPublicProblem } from './server/catalog.mjs';
 import { detectPythonRuntime, runCode, valuesEqual } from './server/runner.mjs';
 import { StateStore } from './server/state-store.mjs';
+import { FireworksClient } from './server/ai/fireworks.mjs';
+import { AiGenerator } from './server/ai/generator.mjs';
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -11,6 +14,9 @@ const catalog = buildCatalog();
 const bySlug = new Map(catalog.map((problem) => [problem.slug, problem]));
 const stateStore = new StateStore();
 await stateStore.init();
+const fireworks = new FireworksClient();
+const aiGenerator = new AiGenerator({ client: fireworks, stateStore });
+const activeAiJobs = new Set();
 const pythonRuntime = detectPythonRuntime();
 const runtimes = {
   python: { available: pythonRuntime.available, version: pythonRuntime.version, reason: pythonRuntime.reason },
@@ -27,6 +33,10 @@ app.get('/api/health', (_request, response) => {
 });
 
 app.get('/api/runtime', (_request, response) => response.json(runtimes));
+app.get('/api/ai/status', (_request, response) => response.json({
+  ...fireworks.status(),
+  safeguards: ['independent GLM review', 'local reference execution', 'deduplication', 'persisted verification metadata'],
+}));
 
 app.get('/api/state', (_request, response) => response.json(stateStore.snapshot()));
 
@@ -71,6 +81,30 @@ app.get('/api/problems/:slug/solution', (request, response) => {
   return response.json({ source: problem.source, language: problem.editorLanguage });
 });
 
+async function runAiJob(request, response, type) {
+  const problem = bySlug.get(request.params.slug);
+  if (!problem) return response.status(404).json({ error: 'Problem not found.' });
+  if (!fireworks.status().configured) {
+    return response.status(503).json({ error: 'Set FIREWORKS_API_KEY in .env and restart the server to enable AI generation.' });
+  }
+  const key = problem.slug;
+  if (activeAiJobs.has(key)) return response.status(409).json({ error: `A ${type} generation job is already running for this problem.` });
+  activeAiJobs.add(key);
+  try {
+    const result = type === 'tests'
+      ? await aiGenerator.generateTests(problem)
+      : await aiGenerator.generateSolution(problem);
+    return response.json(result);
+  } catch (error) {
+    return response.status(error.status || 500).json({ error: error.message || 'AI generation failed.' });
+  } finally {
+    activeAiJobs.delete(key);
+  }
+}
+
+app.post('/api/ai/problems/:slug/generate-tests', (request, response) => runAiJob(request, response, 'tests'));
+app.post('/api/ai/problems/:slug/generate-solution', (request, response) => runAiJob(request, response, 'solution'));
+
 app.post('/api/run', async (request, response) => {
   const { slug, code, cases } = request.body || {};
   const problem = bySlug.get(slug);
@@ -80,6 +114,10 @@ app.post('/api/run', async (request, response) => {
     return response.status(400).json({ error: 'Provide code and up to 20 test cases.' });
   }
   const execution = await runCode(problem.editorLanguage, code, cases);
+  execution.results = (execution.results || []).map((result, index) => {
+    if (!Object.hasOwn(cases[index] || {}, 'expected')) return result;
+    return { ...result, expected: cases[index].expected, passed: result.ok && valuesEqual(result.value, cases[index].expected) };
+  });
   return response.json(execution);
 });
 
@@ -88,20 +126,28 @@ app.post('/api/submit', async (request, response) => {
   const problem = bySlug.get(slug);
   if (!problem) return response.status(404).json({ error: 'Problem not found.' });
   if (!problem.runnable) return response.status(400).json({ error: `${problem.language} cannot be judged without its original fixtures.` });
-  if (!problem.tests.length) {
+  const generatedTests = stateStore.snapshot().problems[slug]?.generatedTests?.tests || [];
+  const seen = new Set();
+  const judgeTests = [...problem.tests, ...generatedTests].filter((test) => {
+    const key = JSON.stringify(test.args);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 30);
+  if (!judgeTests.length) {
     return response.status(422).json({ error: 'This imported exercise has no bundled judge cases yet. You can still run custom cases.' });
   }
-  const execution = await runCode(problem.editorLanguage, code, problem.tests);
+  const execution = await runCode(problem.editorLanguage, code, judgeTests);
   const results = execution.results.map((result, index) => ({
     ...result,
-    passed: result.ok && valuesEqual(result.value, problem.tests[index].expected),
+    passed: result.ok && valuesEqual(result.value, judgeTests[index].expected),
   }));
   const accepted = execution.ok && results.every((result) => result.passed);
   return response.json({
     ...execution,
     accepted,
     passed: results.filter((result) => result.passed).length,
-    total: problem.tests.length,
+    total: judgeTests.length,
     results: results.map((result) => ({ ok: result.ok, passed: result.passed, error: result.error })),
   });
 });

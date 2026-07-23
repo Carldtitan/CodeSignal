@@ -29,6 +29,8 @@ data/*.tmp
 # Ignore keys
 *.pem
 *.pub
+.env
+.env.local
 
 # Ignore Python specific files
 *.pyc
