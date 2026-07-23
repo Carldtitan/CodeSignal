@@ -16,6 +16,7 @@ export function createDefaultState() {
         difficulty: 'All difficulties',
         category: 'All topics',
         view: 'all',
+        signatureOnly: false,
       },
     },
     settings: {

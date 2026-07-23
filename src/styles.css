@@ -98,6 +98,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .search-box input::placeholder { color: #777; }
 .select-box select { min-width: 105px; appearance: none; border: 0; outline: 0; background: transparent; color: #bbb; font-size: 12px; cursor: pointer; }
 .select-box option { background: #282828; }
+.signature-filter { height: 36px; display: flex; align-items: center; gap: 7px; padding: 0 11px; border: 1px solid #383838; border-radius: 7px; background: #242424; color: #aaa; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.signature-filter input { width: 14px; height: 14px; margin: 0; accent-color: var(--green); cursor: pointer; }
+.signature-filter:has(input:checked) { border-color: #32864d; background: #213027; color: #b9dcc3; }
 .filter-count { margin-left: auto; color: #777; font-size: 12px; }
 .problem-table { width: 100%; }
 .problem-row { width: 100%; min-height: 58px; display: grid; grid-template-columns: 64px minmax(270px, 1.8fr) minmax(140px, .8fr) 100px 90px; align-items: center; gap: 12px; padding: 8px 18px; border: 0; border-bottom: 1px solid #282828; background: transparent; text-align: left; color: #9a9a9a; font-size: 12px; }

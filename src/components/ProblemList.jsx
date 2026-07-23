@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Check, ChevronDown, Circle, Filter, Search, Shuffle, Sparkles,
+  Check, ChevronDown, Circle, Code2, Filter, Search, Shuffle, Sparkles,
 } from 'lucide-react';
+import { filterProblems } from '../problem-filters.js';
 
 const difficulties = ['All difficulties', 'Easy', 'Medium', 'Hard'];
 
@@ -10,20 +11,17 @@ export default function ProblemList({ problems, statuses, initialFilters, onFilt
   const [difficulty, setDifficulty] = useState(initialFilters?.difficulty || 'All difficulties');
   const [category, setCategory] = useState(initialFilters?.category || 'All topics');
   const [view, setView] = useState(initialFilters?.view || 'all');
+  const [signatureOnly, setSignatureOnly] = useState(Boolean(initialFilters?.signatureOnly));
   const categories = useMemo(() => ['All topics', ...new Set(problems.map((problem) => problem.category))], [problems]);
 
   useEffect(() => {
-    const timer = setTimeout(() => onFilters({ query, difficulty, category, view }), 250);
+    const timer = setTimeout(() => onFilters({ query, difficulty, category, view, signatureOnly }), 250);
     return () => clearTimeout(timer);
-  }, [query, difficulty, category, view]);
+  }, [query, difficulty, category, view, signatureOnly]);
 
-  const filtered = useMemo(() => problems.filter((problem) => {
-    const matchesQuery = `${problem.title} ${problem.tags.join(' ')}`.toLowerCase().includes(query.toLowerCase());
-    const matchesDifficulty = difficulty === 'All difficulties' || problem.difficulty === difficulty;
-    const matchesCategory = category === 'All topics' || problem.category === category;
-    const matchesView = view === 'all' || Boolean(statuses[problem.slug]);
-    return matchesQuery && matchesDifficulty && matchesCategory && matchesView;
-  }), [problems, query, difficulty, category, view, statuses]);
+  const filtered = useMemo(() => filterProblems(
+    problems, { query, difficulty, category, view, signatureOnly }, statuses,
+  ), [problems, query, difficulty, category, view, signatureOnly, statuses]);
 
   const solved = Object.values(statuses).filter((status) => status === 'solved').length;
   const attempted = Object.values(statuses).filter((status) => status === 'attempted').length;
@@ -72,6 +70,10 @@ export default function ProblemList({ problems, statuses, initialFilters, onFilt
           <label className="search-box"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search questions" /></label>
           <label className="select-box"><Filter size={15} /><select value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} /></label>
           <label className="select-box"><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>{difficulties.map((item) => <option key={item}>{item}</option>)}</select><ChevronDown size={14} /></label>
+          <label className="signature-filter" title="Hide exercises that do not expose solution(...) parameters">
+            <input type="checkbox" checked={signatureOnly} onChange={(event) => setSignatureOnly(event.target.checked)} />
+            <Code2 size={15} /><span>Has solution signature</span>
+          </label>
           <span className="filter-count">{filtered.length} questions</span>
         </div>
 
