@@ -63,7 +63,7 @@ function uniqueTests(tests) {
   });
 }
 
-function assertSafePython(code) {
+export function assertSafePython(code) {
   if (!/^\s*def\s+solution\s*\(/m.test(code)) throw new Error("Generated code did not define 'solution(...)'.");
   if (code.length > 30_000) throw new Error('Generated solution was unexpectedly large.');
   const unsafe = [
@@ -74,7 +74,7 @@ function assertSafePython(code) {
   if (unsafe.some((pattern) => pattern.test(code))) throw new Error('Generated code requested unsafe system capabilities.');
 }
 
-async function verifySolution(problem, code, tests) {
+export async function verifyPythonSolution(problem, code, tests) {
   try { assertSafePython(code); } catch (error) { return { passed: false, error: error.message, failures: [] }; }
   const execution = await runCode('python', code, tests.map(({ args }) => ({ args })));
   const failures = tests.flatMap((test, index) => {
@@ -203,7 +203,7 @@ export class AiGenerator {
       });
       responses.push(completion);
       candidate = solutionFromPayload(completion.data);
-      verification = await verifySolution(problem, candidate.code, tests);
+      verification = await verifyPythonSolution(problem, candidate.code, tests);
       if (verification.passed) break;
     }
     if (!verification?.passed) {
@@ -217,7 +217,7 @@ export class AiGenerator {
     });
     responses.push(review);
     const reviewedCandidate = solutionFromPayload({ ...candidate, ...review.data });
-    const reviewedVerification = await verifySolution(problem, reviewedCandidate.code, tests);
+    const reviewedVerification = await verifyPythonSolution(problem, reviewedCandidate.code, tests);
     if (reviewedVerification.passed) candidate = reviewedCandidate;
 
     const createdAt = new Date().toISOString();

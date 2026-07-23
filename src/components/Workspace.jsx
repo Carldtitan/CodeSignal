@@ -7,7 +7,7 @@ import {
   ShieldCheck, Sparkles, TerminalSquare, WandSparkles, WrapText, X, XCircle,
 } from 'lucide-react';
 import {
-  generateAiSolution, generateAiTests, saveProblemOnExit, saveSubmission, updateProblem,
+  generateAiSolution, generateAiTests, saveProblemOnExit, saveSubmission, streamRun, updateProblem,
 } from '../state-client.js';
 
 function parseArgument(value) {
@@ -297,20 +297,19 @@ export default function Workspace({
     if (!canRun || running) return;
     await flushPending();
     setRunning(true); setBottomTab('result'); saveUi({ bottomTab: 'result' });
+    const cases = testCases.map((testCase) => ({
+      args: testCase.args.map(parseArgument),
+      ...(Object.hasOwn(testCase, 'expected') && testCase.expected !== undefined ? { expected: testCase.expected } : {}),
+    }));
+    const data = { ok: true, streaming: true, results: cases.map(() => ({ status: 'queued' })) };
+    setLastRun({ kind: 'run', data: { ...data, results: [...data.results] }, time: Date.now() });
     try {
-      const response = await fetch('/api/run', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slug: problem.slug,
-          code,
-          cases: testCases.map((testCase) => ({
-            args: testCase.args.map(parseArgument),
-            ...(Object.hasOwn(testCase, 'expected') && testCase.expected !== undefined ? { expected: testCase.expected } : {}),
-          })),
-        }),
+      await streamRun({ slug: problem.slug, code, cases }, (event) => {
+        if (event.type === 'case-start') data.results[event.index] = { status: 'running' };
+        if (event.type === 'case-result') data.results[event.index] = { ...event.result, status: event.result.passed === false || !event.result.ok ? 'failed' : 'passed' };
+        if (event.type === 'complete') Object.assign(data, { ok: event.ok, error: event.error, logs: event.logs, streaming: false });
+        setLastRun({ kind: 'run', data: { ...data, results: [...data.results] }, time: Date.now() });
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Run failed.');
       const storedRun = { kind: 'run', data, time: Date.now() };
       setLastRun(storedRun);
       const nextStatus = status === 'solved' ? 'solved' : 'attempted';
@@ -318,7 +317,8 @@ export default function Workspace({
       queueSave({ lastRun: storedRun, status: nextStatus }, 0);
       onActivity();
     } catch (error) {
-      const storedRun = { kind: 'run', data: { ok: false, error: error.message }, time: Date.now() };
+      data.streaming = false;
+      const storedRun = { kind: 'run', data: { ...data, ok: false, error: error.message }, time: Date.now() };
       setLastRun(storedRun); queueSave({ lastRun: storedRun }, 0);
     } finally { setRunning(false); }
   }
@@ -583,8 +583,11 @@ function ResultView({ lastRun }) {
       <div><h3>{data.accepted ? 'Accepted' : 'Not accepted'}</h3><p>{data.error || `${data.passed} / ${data.total} judge cases passed.`}</p></div>
     </div>;
   }
-  if (!data.ok) return <div className="runtime-error"><h3><XCircle size={18} /> Runtime Error</h3><pre>{data.error || data.results?.find((result) => !result.ok)?.error}</pre></div>;
+  if (!data.ok && data.error) return <div className="runtime-error"><h3><XCircle size={18} /> Runtime Error</h3><pre>{data.error}</pre></div>;
   return <div className="result-cases">{data.results?.map((result, index) => {
+    if (result.status === 'queued' || result.status === 'running') return <article key={index} className={result.status}>
+      <h3>{result.status === 'running' ? <LoaderCircle className="spin" size={16} /> : <Clock3 size={16} />} Case {index + 1} · {result.status === 'running' ? 'Running' : 'Queued'}</h3>
+    </article>;
     const evaluated = Object.hasOwn(result, 'passed');
     const successful = result.ok && (!evaluated || result.passed);
     return <article key={index} className={successful ? 'passed' : 'failed'}>

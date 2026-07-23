@@ -1,8 +1,8 @@
 import {
-  ChevronLeft, ChevronRight, Flame, FlaskConical, List, Shuffle,
+  Bot, ChevronLeft, ChevronRight, Flame, FlaskConical, List, Shuffle,
 } from 'lucide-react';
 
-export default function TopNav({ compact, problem, streak, onHome, onDaily, onPrevious, onNext, onRandom }) {
+export default function TopNav({ compact, problem, streak, onHome, onDaily, onPrevious, onNext, onRandom, onChat }) {
   return (
     <header className="topnav">
       <div className="topnav__left">
@@ -26,6 +26,7 @@ export default function TopNav({ compact, problem, streak, onHome, onDaily, onPr
         )}
       </div>
       <div className="topnav__right">
+        <button className="ai-chat-button" onClick={onChat}><Bot size={16} /> Chat with AI</button>
         {compact && <button className="icon-button" onClick={onRandom} title="Open a random problem"><Shuffle size={17} /></button>}
         <button className="daily-button" onClick={onDaily} title="Open today's deterministic daily problem"><FlaskConical size={16} /> Daily Challenge</button>
         <span className="streak" title={`${streak}-day practice streak`}><Flame size={18} /><span>{streak}</span></span>

@@ -3,8 +3,9 @@ import { LoaderCircle } from 'lucide-react';
 import TopNav from './components/TopNav.jsx';
 import ProblemList from './components/ProblemList.jsx';
 import Workspace from './components/Workspace.jsx';
+import AiChatDrawer from './components/AiChatDrawer.jsx';
 import {
-  loadState, migrateBrowserState, updateSession, updateSettings,
+  loadState, migrateBrowserState, updateProblem, updateSession, updateSettings,
 } from './state-client.js';
 
 function slugFromHash() {
@@ -32,6 +33,8 @@ export default function App() {
   const [aiStatus, setAiStatus] = useState(null);
   const [currentSlug, setCurrentSlug] = useState(slugFromHash);
   const [error, setError] = useState('');
+  const [chatOpen, setChatOpen] = useState(false);
+  const [editorRevision, setEditorRevision] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -88,6 +91,14 @@ export default function App() {
     setBackendState((state) => ({ ...state, problems: { ...state.problems, [slug]: problemState } }));
   }
 
+  async function applyAiCode(code) {
+    if (!currentProblem) return;
+    const saved = await updateProblem(currentProblem.slug, { code });
+    updateProblemMemory(currentProblem.slug, saved);
+    setEditorRevision((value) => value + 1);
+    setChatOpen(false);
+  }
+
   function updateSessionMemory(patch) {
     setBackendState((state) => ({ ...state, session: { ...state.session, ...patch } }));
     return updateSession(patch);
@@ -128,10 +139,11 @@ export default function App() {
         onPrevious={() => navigate(problems[(currentIndex - 1 + problems.length) % problems.length].slug)}
         onNext={() => navigate(problems[(currentIndex + 1) % problems.length].slug)}
         onRandom={() => navigate(problems[Math.floor(Math.random() * problems.length)].slug)}
+        onChat={() => setChatOpen(true)}
       />
       {currentProblem ? (
         <Workspace
-          key={currentProblem.slug}
+          key={`${currentProblem.slug}:${editorRevision}`}
           problem={currentProblem}
           problemState={backendState.problems[currentProblem.slug] || {}}
           settings={backendState.settings}
@@ -151,6 +163,7 @@ export default function App() {
           onDaily={openDaily}
         />
       )}
+      <AiChatDrawer open={chatOpen} problem={currentProblem} problemState={currentProblem ? backendState.problems[currentProblem.slug] || {} : {}} aiStatus={aiStatus} onClose={() => setChatOpen(false)} onProblemState={updateProblemMemory} onApplyCode={applyAiCode} />
     </div>
   );
 }

@@ -44,6 +44,38 @@ export function generateAiSolution(slug) {
   return request(`/api/ai/problems/${slug}/generate-solution`, { method: 'POST', body: '{}' });
 }
 
+export function chatWithAi(payload) {
+  return request('/api/ai/chat', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function clearAiChat(slug) {
+  return request(`/api/ai/chat/${slug}`, { method: 'DELETE' });
+}
+
+export async function streamRun(payload, onEvent, signal) {
+  const response = await fetch('/api/run/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data.error || `Request failed with status ${response.status}.`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+    for (const line of lines) if (line.trim()) onEvent(JSON.parse(line));
+    if (done) break;
+  }
+}
+
 export function saveProblemOnExit(slug, snapshot) {
   const body = new Blob([JSON.stringify(snapshot)], { type: 'application/json' });
   return navigator.sendBeacon(`/api/state/problems/${slug}/snapshot`, body);

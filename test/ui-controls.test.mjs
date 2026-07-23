@@ -10,6 +10,7 @@ test('every rendered button is connected to an action', async () => {
     'src/components/ProblemList.jsx',
     'src/components/TopNav.jsx',
     'src/components/Workspace.jsx',
+    'src/components/AiChatDrawer.jsx',
   ];
   for (const file of files) {
     const source = await fs.readFile(path.join(repositoryRoot, file), 'utf8');
