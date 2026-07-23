@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { repositoryRoot } from './catalog.mjs';
 
 export const defaultStatePath = path.join(repositoryRoot, 'data', 'codelab-state.json');
@@ -44,6 +45,20 @@ function safeClone(value) {
   return structuredClone(value);
 }
 
+const retryableRenameErrors = new Set(['EPERM', 'EACCES', 'EBUSY']);
+
+async function replaceWithRetry(temporaryPath, destinationPath) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      await fs.rename(temporaryPath, destinationPath);
+      return;
+    } catch (error) {
+      if (!retryableRenameErrors.has(error.code) || attempt === 7) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+    }
+  }
+}
+
 export class StateStore {
   constructor(filePath = process.env.CODELAB_STATE_FILE || defaultStatePath) {
     this.filePath = filePath;
@@ -54,13 +69,30 @@ export class StateStore {
   async init() {
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     try {
-      const saved = JSON.parse(await fs.readFile(this.filePath, 'utf8'));
+      const saved = await this.readNewestValidState();
       this.state = mergeObject(createDefaultState(), saved);
     } catch (error) {
       if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
       await this.persist();
     }
     return this.snapshot();
+  }
+
+  async readNewestValidState() {
+    const directory = path.dirname(this.filePath);
+    const baseName = path.basename(this.filePath);
+    const candidates = (await fs.readdir(directory))
+      .filter((name) => name === baseName || (name.startsWith(`${baseName}.`) && name.endsWith('.tmp')))
+      .map((name) => path.join(directory, name));
+    const valid = [];
+    for (const candidate of candidates) {
+      try {
+        const value = JSON.parse(await fs.readFile(candidate, 'utf8'));
+        valid.push({ value, time: Date.parse(value.updatedAt || '') || (await fs.stat(candidate)).mtimeMs });
+      } catch { /* Ignore incomplete files left by an interrupted write. */ }
+    }
+    if (!valid.length) throw Object.assign(new Error('No saved state exists.'), { code: 'ENOENT' });
+    return valid.sort((left, right) => right.time - left.time)[0].value;
   }
 
   snapshot() {
@@ -70,10 +102,10 @@ export class StateStore {
   async persist() {
     this.state.updatedAt = new Date().toISOString();
     const snapshot = JSON.stringify(this.state, null, 2);
-    const temporaryPath = `${this.filePath}.${process.pid}.tmp`;
-    this.writeQueue = this.writeQueue.then(async () => {
+    const temporaryPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
+    this.writeQueue = this.writeQueue.catch(() => undefined).then(async () => {
       await fs.writeFile(temporaryPath, snapshot, 'utf8');
-      await fs.rename(temporaryPath, this.filePath);
+      await replaceWithRetry(temporaryPath, this.filePath);
     });
     await this.writeQueue;
   }

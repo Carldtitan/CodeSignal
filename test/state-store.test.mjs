@@ -49,3 +49,17 @@ test('legacy browser data only fills missing backend fields', async (context) =>
   assert.equal(state.problems['intro-add'].code, 'new backend code');
   assert.equal(state.problems['intro-add'].status, 'attempted');
 });
+
+test('backend recovers the newest valid state from an interrupted Windows rename', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'codelab-recovery-'));
+  context.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const file = path.join(directory, 'state.json');
+  await fs.writeFile(file, JSON.stringify({ updatedAt: '2026-07-22T20:00:00.000Z', problems: {} }));
+  await fs.writeFile(`${file}.123.tmp`, JSON.stringify({
+    updatedAt: '2026-07-22T20:00:01.000Z',
+    problems: { 'fare-estimator': { aiChat: { messages: [{ id: 'recovered' }] } } },
+  }));
+  const store = new StateStore(file);
+  const state = await store.init();
+  assert.equal(state.problems['fare-estimator'].aiChat.messages[0].id, 'recovered');
+});

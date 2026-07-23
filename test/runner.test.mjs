@@ -40,6 +40,12 @@ test('streaming runner enforces its execution ceiling', async () => {
   assert.equal(events.at(-1).type, 'complete');
 });
 
+test('judge tolerates floating-point representation noise in nested outputs', () => {
+  assert.equal(valuesEqual([13.700000000000001, 28.099999999999998], [13.7, 28.1]), true);
+  assert.equal(valuesEqual([7.658999999999999], [7.66]), false);
+  assert.equal(valuesEqual({ fare: [23.1] }, { fare: [23.100000000000001] }), true);
+});
+
 test('all curated judge fixtures accept their imported reference solution', async () => {
   const judgedProblems = buildCatalog().filter((problem) => problem.tests.length);
   assert.ok(judgedProblems.length >= 15);
