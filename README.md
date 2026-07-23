@@ -6,11 +6,11 @@ A local, LeetCode-inspired practice interface for the 526 exercises in this repo
 
 - Searchable problemset with category and difficulty filters
 - Dark split-pane problem, editor, and testcase workspace
-- Monaco code editor with autosaved progress per problem
+- Monaco code editor with backend autosave status and persistent preferences
 - Local Python and JavaScript execution with a five-second timeout
 - Curated submit/judge cases for selected popular exercises
-- Custom JSON testcase inputs for every standard runnable `solution(...)`
-- Submission history and solved/attempted progress stored in the browser
+- Multiple custom JSON testcases for every standard runnable `solution(...)`
+- Persistent notes, run results, timers, pane layouts, session state, and submission history
 - Opt-in reference solution reveal
 - Responsive layout for smaller screens
 
@@ -27,6 +27,8 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+The backend creates `data/codelab-state.json` automatically. This private, Git-ignored file is the source of truth for everything you do in the workspace. Reopening the app restores the active problem and the exact state of your practice session. Existing progress from the previous browser-storage version is imported automatically on first launch.
+
 ## Checks and production build
 
 ```bash
@@ -35,7 +37,7 @@ npm run build
 npm start
 ```
 
-The local runner executes editor code on your computer. Only run code you trust.
+The server checks `python`, `python3`, and the Windows `py -3` launcher at startup, and always exposes its Node.js runtime for JavaScript. If Python lives elsewhere, set `CODELAB_PYTHON` to the executable path before starting the app. The local runner executes editor code on your computer, so only run code you trust.
 
 ## Project structure
 
@@ -44,6 +46,7 @@ CodeSignal/          Original challenge and reference-solution collection
 server/              Catalog extraction, curated judge cases, and local runner
 src/                 React practice interface
 test/                Catalog and runner tests
+data/                Private local session state (created on first launch)
 server.mjs           Express/Vite development and production server
 ```
 

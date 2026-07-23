@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const PYTHON_HARNESS = String.raw`
 import contextlib
@@ -109,9 +109,45 @@ function execute(command, args, harness, payload, timeout = 5000) {
 }
 
 export async function runCode(editorLanguage, code, cases) {
-  if (editorLanguage === 'python') return execute('python', ['-I', '-c'], PYTHON_HARNESS, { code, cases });
+  if (editorLanguage === 'python') {
+    const runtime = detectPythonRuntime();
+    if (!runtime.available) return { ok: false, error: runtime.reason, results: [] };
+    return execute(runtime.command, [...runtime.prefixArgs, '-I', '-c'], PYTHON_HARNESS, { code, cases });
+  }
   if (editorLanguage === 'javascript') return execute(process.execPath, ['--input-type=module', '-e'], JAVASCRIPT_HARNESS, { code, cases });
   return { ok: false, error: 'This language needs external fixtures and is not runnable in the local judge.', results: [] };
+}
+
+let cachedPythonRuntime;
+export function detectPythonRuntime() {
+  if (cachedPythonRuntime) return cachedPythonRuntime;
+  const configured = process.env.CODELAB_PYTHON;
+  const candidates = [
+    ...(configured ? [{ command: configured, prefixArgs: [] }] : []),
+    { command: 'python', prefixArgs: [] },
+    { command: 'python3', prefixArgs: [] },
+    ...(process.platform === 'win32' ? [{ command: 'py', prefixArgs: ['-3'] }] : []),
+  ];
+  for (const candidate of candidates) {
+    const check = spawnSync(candidate.command, [...candidate.prefixArgs, '--version'], { encoding: 'utf8', windowsHide: true });
+    if (!check.error && check.status === 0) {
+      cachedPythonRuntime = {
+        available: true,
+        command: candidate.command,
+        prefixArgs: candidate.prefixArgs,
+        version: (check.stdout || check.stderr || '').trim(),
+      };
+      return cachedPythonRuntime;
+    }
+  }
+  cachedPythonRuntime = {
+    available: false,
+    command: null,
+    prefixArgs: [],
+    version: '',
+    reason: 'Python 3 was not found. Install Python or set CODELAB_PYTHON to its executable path.',
+  };
+  return cachedPythonRuntime;
 }
 
 export function valuesEqual(left, right) {

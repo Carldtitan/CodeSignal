@@ -23,6 +23,8 @@ npm-debug.log*
 # Ignore build and distribution directories
 dist/
 build/
+data/codelab-state.json
+data/*.tmp
 
 # Ignore keys
 *.pem
