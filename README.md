@@ -1,47 +1,52 @@
-# CodeSignal solutions
-![GitHub language count](https://img.shields.io/github/languages/count/amshrestha2020/CodeSignal?color=blue)
-![GitHub top language](https://img.shields.io/github/languages/top/amshrestha2020/CodeSignal?label=python&logo=java&color=blue)
-![GitHub top language](https://img.shields.io/github/languages/top/amshrestha2020/CodeSignal?label=sql&logo=java&color=green)
-![GitHub top language](https://img.shields.io/github/languages/top/amshrestha2020/CodeSignal?label=bash&logo=java&color=red)
-![GitHub top language](https://img.shields.io/github/languages/top/amshrestha2020/CodeSignal?label=javascript&logo=java&color=yellow)
-![GitHub license](https://img.shields.io/github/license/amshrestha2020/CodeSignal?color=blue)
-![GitHub last commit](https://img.shields.io/github/last-commit/amshrestha2020/CodeSignal?color=blue)
+# CodeLab — CodeSignal Practice Workspace
 
-Solutions of coding from [CodeSignal](https://codesignal.com) platform
+A local, LeetCode-inspired practice interface for the 526 exercises in this repository. The original Python, SQL, JavaScript, and HTML solutions are converted into a searchable problem catalog at runtime, so the source collection remains the single source of truth.
 
+## What is included
 
+- Searchable problemset with category and difficulty filters
+- Dark split-pane problem, editor, and testcase workspace
+- Monaco code editor with autosaved progress per problem
+- Local Python and JavaScript execution with a five-second timeout
+- Curated submit/judge cases for selected popular exercises
+- Custom JSON testcase inputs for every standard runnable `solution(...)`
+- Submission history and solved/attempted progress stored in the browser
+- Opt-in reference solution reveal
+- Responsive layout for smaller screens
 
+SQL and HTML exercises can be read and edited, but they are not executable because the original repository does not include their database or browser fixtures.
 
-# Welcome to the CodeSignal Practice Solutions Repository! :wave:
+## Run locally
 
-This repository is your one-stop solution for practicing coding skills on CodeSignal. It contains a comprehensive collection of solutions to various challenges available on CodeSignal. Whether you're preparing for coding interviews or enhancing your problem-solving skills, this repository will be a valuable resource. :books:
+Requirements: Node.js 20+ and Python 3 available as `python`.
 
-## :file_folder: Repository Structure
+```bash
+npm install
+npm run dev
+```
 
-The solutions are organized into different categories based on the type of challenges available on CodeSignal:
+Open [http://localhost:3000](http://localhost:3000).
 
-- **Challenges**: General algorithmic challenges that cover a wide range of topics and difficulty levels.
-- **Company Challenges**: Real-world coding challenges that are typically asked by top tech companies during their hiring process.
-- **Core**: Fundamental algorithmic and data structure problems that are essential for building a strong coding foundation.
-- **Databases**: SQL and database management challenges that test your ability to query and manipulate data effectively.
-- **Graphs**: Problems focused on graph theory, including traversal, shortest path, and connectivity.
-- **Interview Practices**: Common interview questions and problems that are frequently asked in technical interviews.
-- **Intro**: Beginner-friendly problems that help you get started with coding and familiarize yourself with basic concepts.
-- **Python**: Python-specific challenges that enhance your proficiency in Python programming.
+## Checks and production build
 
-## :rocket: How to Use This Repository
+```bash
+npm test
+npm run build
+npm start
+```
 
-Each category contains a folder with solutions to the respective challenges. The solutions are implemented in Python and are well-documented to help you understand the logic and approach used to solve each problem.
+The local runner executes editor code on your computer. Only run code you trust.
 
-## :computer: Getting Started
+## Project structure
 
-1. Clone the repository:
+```text
+CodeSignal/          Original challenge and reference-solution collection
+server/              Catalog extraction, curated judge cases, and local runner
+src/                 React practice interface
+test/                Catalog and runner tests
+server.mjs           Express/Vite development and production server
+```
 
-git clone [https://github.com/amshrestha2020/codesignal-practice-solutions.git](https://github.com/amshrestha2020/CodeSignal.git)
+## Attribution
 
-2. Navigate to the desired category:
-
-cd codesignal-practice-solutions/Core
-
-
-Happy Coding! :smile:
+The exercise collection and imported reference solutions originated in [amshrestha2020/CodeSignal](https://github.com/amshrestha2020/CodeSignal). The practice workspace in this fork is an independent interface and is not affiliated with CodeSignal or LeetCode.
